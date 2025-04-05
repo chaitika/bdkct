@@ -1,0 +1,18 @@
+services:
+  bitcoind:
+    image: ruimarinho/bitcoin-core:24.0.1
+    restart: unless-stopped
+    ports:
+      - "18443:18443"  # RPC
+      - "18444:18444"  # P2P
+    volumes:
+      - ../../data:/bitcoin/.bitcoin
+    command:
+      -printtoconsole
+      -regtest=1
+      -server=1
+      -txindex=1
+      -rpcuser=bitcoin
+      -rpcpassword=bitcoin
+      -rpcallowip=0.0.0.0/0
+      -rpcbind=0.0.0.0
