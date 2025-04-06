@@ -3,12 +3,11 @@ services:
     image: ruimarinho/bitcoin-core:24.0.1
     restart: unless-stopped
     ports:
-      - "18443:18443"  # RPC
-      - "18444:18444"  # P2P
+      - "18443:18443" # RPC
+      - "18444:18444" # P2P
     volumes:
-      - ../../data:/bitcoin/.bitcoin
-    command:
-      -printtoconsole
+      - bitcoind_data:/root/.bitcoin
+    command: -printtoconsole
       -regtest=1
       -server=1
       -txindex=1
@@ -16,3 +15,26 @@ services:
       -rpcpassword=bitcoin
       -rpcallowip=0.0.0.0/0
       -rpcbind=0.0.0.0
+  electrs:
+    image: mempool/electrs:latest
+    restart: on-failure
+    ports:
+      - "50001:50001" # Electrum RPC (used internally)
+      - "3002:3002"
+    command: |
+      --network regtest
+      --cookie bitcoin:bitcoin
+      --daemon-rpc-addr bitcoind:18443
+      --electrum-rpc-addr 0.0.0.0:60001
+      --db-dir /electrs
+      --http-addr 0.0.0.0:3002
+      --cors '*'
+      --jsonrpc-import
+    volumes:
+      - electrs_data:/electrs
+      - bitcoind_data:/root/.bitcoin
+    environment:
+      - RUST_BACKTRACE=full
+volumes:
+  bitcoind_data:
+  electrs_data:
