@@ -8,8 +8,5 @@ edition = "2021"
 fail-on-warnings = []
 
 [dependencies]
-bdk = { version = "0.30.2", features = [ "esplora" ] }
-bdk_esplora = { version = "*", features = ["blocking"] }
-bdk_file_store = "*"
-bdk_wallet = "*"
+bdk = { version = "0.30.2", features = [ "use-esplora-blocking" ] }
 anyhow = "*"

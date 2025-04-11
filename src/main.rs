@@ -1,27 +1,18 @@
-use std::{collections::BTreeSet, io::Write};
-
 use bdk::{
-    bitcoin::{Amount, Network},
-    blockchain::{esplora::EsploraBlockchainConfig, EsploraBlockchain},
-    database::MemoryDatabase,
-    wallet::AddressIndex,
-    KeychainKind, SignOptions, Wallet,
+    bitcoin::Network, blockchain::esplora::EsploraBlockchain, database::MemoryDatabase,
+    wallet::AddressIndex, SignOptions, Wallet,
 };
-use bdk_esplora::{esplora_client, EsploraExt};
 
-const DB_MAGIC: &str = "bdk_wallet_esplora_example";
-const DB_PATH: &str = "bdk-example-esplora-blocking.db";
-const SEND_AMOUNT: Amount = Amount::from_sat(5000);
+const SEND_AMOUNT: u64 = 50000;
 const STOP_GAP: usize = 5;
-const PARALLEL_REQUESTS: usize = 5;
 
-const NETWORK: Network = Network::Signet;
+const NETWORK: Network = Network::Regtest;
 const EXTERNAL_DESC: &str = "wpkh(tprv8ZgxMBicQKsPdy6LMhUtFHAgpocR8GC6QmwMSFpZs7h6Eziw3SpThFfczTDh5rW2krkqffa11UpX3XkeTTB2FvzZKWXqPY54Y6Rq4AQ5R8L/84'/1'/0'/0/*)";
 const INTERNAL_DESC: &str = "wpkh(tprv8ZgxMBicQKsPdy6LMhUtFHAgpocR8GC6QmwMSFpZs7h6Eziw3SpThFfczTDh5rW2krkqffa11UpX3XkeTTB2FvzZKWXqPY54Y6Rq4AQ5R8L/84'/1'/0'/1/*)";
-const ESPLORA_URL: &str = "http://localhost:3002";
+const ESPLORA_URL: &str = "http://localhost:3002"; // run esplora on localhost:3002
 
 fn main() -> Result<(), anyhow::Error> {
-    let mut db = MemoryDatabase::new();
+    let db = MemoryDatabase::new();
     let wallet = Wallet::new(EXTERNAL_DESC, Some(INTERNAL_DESC), NETWORK, db)?;
 
     let address = wallet.get_address(AddressIndex::New)?;
@@ -34,25 +25,9 @@ fn main() -> Result<(), anyhow::Error> {
     println!("Wallet balance before syncing: {}", balance.get_total());
 
     print!("Syncing...");
-    let client = esplora_client::Builder::new(ESPLORA_URL).build_blocking();
+    let client = EsploraBlockchain::new(ESPLORA_URL, STOP_GAP);
 
-    let request = wallet.start_full_scan().inspect({
-        let mut stdout = std::io::stdout();
-        let mut once = BTreeSet::<KeychainKind>::new();
-        move |keychain, spk_i, _| {
-            if once.insert(keychain) {
-                print!("\nScanning keychain [{:?}] ", keychain);
-            }
-            print!(" {:<3}", spk_i);
-            stdout.flush().expect("must flush")
-        }
-    });
-
-    let update = client.full_scan(request, STOP_GAP, PARALLEL_REQUESTS)?;
-
-    wallet.apply_update(update)?;
-    wallet.persist(&mut db)?;
-    println!();
+    wallet.sync(&client, Default::default())?;
 
     let balance = wallet.get_balance()?;
     println!("Wallet balance after syncing: {}", balance.get_total());
@@ -68,13 +43,14 @@ fn main() -> Result<(), anyhow::Error> {
     let mut tx_builder = wallet.build_tx();
     tx_builder.add_recipient(address.script_pubkey(), SEND_AMOUNT);
 
-    let mut psbt = tx_builder.finish()?;
-    let finalized = wallet.sign(&mut psbt, SignOptions::default())?;
-    assert!(finalized);
+    let (mut psbt, _details) = tx_builder.finish()?;
+    let finalise = wallet.sign(&mut psbt, SignOptions::default())?;
+    assert!(finalise, "Transaction is finalised");
 
-    let tx = psbt.extract_tx()?;
+    let tx = psbt.extract_tx();
+
     client.broadcast(&tx)?;
-    println!("Tx broadcasted! Txid: {}", tx.compute_txid());
+    println!("Transaction broadcasted: {}", tx.txid());
 
     Ok(())
 }
